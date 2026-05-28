@@ -40,11 +40,22 @@ def db_kur():
     conn = sqlite3.connect('vpn_bot.db')
     cursor = conn.cursor()
     cursor.execute('''CREATE TABLE IF NOT EXISTS adminler (user_id INTEGER PRIMARY KEY, paylasim_sayisi INTEGER DEFAULT 0)''')
+    cursor.execute('''CREATE TABLE IF NOT EXISTS kanallar (kanal_id TEXT PRIMARY KEY, backend_link TEXT)''')
+    cursor.execute('''ALTER TABLE kanallar ADD COLUMN kanal_link TEXT''')
+    conn.commit()
+    conn.close()
+except Exception:
+    pass
+
+def db_kur_duzgun():
+    conn = sqlite3.connect('vpn_bot.db')
+    cursor = conn.cursor()
+    cursor.execute('''CREATE TABLE IF NOT EXISTS adminler (user_id INTEGER PRIMARY KEY, paylasim_sayisi INTEGER DEFAULT 0)''')
     cursor.execute('''CREATE TABLE IF NOT EXISTS kanallar (kanal_id TEXT PRIMARY KEY, kanal_link TEXT)''')
     conn.commit()
     conn.close()
 
-db_kur()
+db_kur_duzgun()
 
 # --- ÝARDÝMCY FUNKSIÝALAR ---
 def admin_mi(user_id):
@@ -88,7 +99,7 @@ async def sms_gelende(update: Update, context: ContextTypes.DEFAULT_TYPE):
     isleg = context.user_data.get('isleg')
     text = update.message.text.strip()
 
-    # 1. KANAL GOŞMAK (Diňe "AYAK_KANAL_GOS" islegi bar bolsa ýa-da format göni gabat gelse)
+    # 1. KANAL GOŞMAK
     if isleg == "AYAK_KANAL_GOS" or ("|" in text and ("-100" in text or text.split('|')[0].strip().replace('-', '').isdigit())):
         if "|" not in text:
             await update.message.reply_text("❌ Format nädogry! Dogry format:\n`-100123456789 | https://t.me/kanal_linki` \n\nÝatyrmak üçin: /start")
@@ -97,7 +108,6 @@ async def sms_gelende(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             k_id, k_link = [x.strip() for x in text.split('|')]
             
-            # Botuň kanaldaky rugsady barlanylýar
             try:
                 test_msg = await context.bot.send_message(chat_id=k_id, text="⚙️ Barlag sms...")
                 await context.bot.delete_message(chat_id=k_id, message_id=test_msg.message_id)
@@ -304,7 +314,7 @@ async def duwmeler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             conn = sqlite3.connect('vpn_bot.db')
             cursor = conn.cursor()
-            cursor.execute("INSERT OR IGNORE INTO adminler (user_id, paylasim_sayisi) VALUES (?, 0)", (user_id,))
+            cursor.execute("INSERT OR IGNORE INTO adminler (user_id, paylasim_sayisi) VALUES (?, 0)")
             cursor.execute("UPDATE adminler SET paylasim_sayisi = paylasim_sayisi + 1 WHERE user_id = ?", (user_id,))
             conn.commit()
             conn.close()
@@ -325,6 +335,6 @@ if __name__ == '__main__':
     port = int(os.environ.get("PORT", 10000))
     threading.Thread(target=lambda: flask_app.run(host="0.0.0.0", port=port, use_reloader=False), daemon=True).start()
     
-    print("Web Server we Bot Render we Pydroid üçin doly durnuklaşdyryldy...")
+    print("Web Server we Bot doly açyldy...")
     run_telegram_bot()
-        
+    
