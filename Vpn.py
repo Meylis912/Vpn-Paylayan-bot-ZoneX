@@ -4,32 +4,38 @@ import os
 import time
 import threading
 import requests
+import asyncio
 from flask import Flask
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
 from telegram.error import TelegramError
 
+# Loglama Sazlamalary
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+
 # --- FLASK WE ANTI-SLEEP (RENDER UKLAMAZLYK GURLUŞY) ---
 flask_app = Flask(__name__)
-RENDER_URL = "https://vpn-bot-z9rj.onrender.com"  
+RENDER_URL = "https://vpn-paylayan-bot-zonex.onrender.com"  
 
 @flask_app.route("/")
 def home():
     return "Bot is Alive!", 200
 
 def self_ping():
-    time.sleep(15)
+    time.sleep(30)
     print("Anti-Sleep ulgamy işjeňleşdirildi...")
     while True:
         try:
-            if "RENDER" in os.environ:
-                requests.get(RENDER_URL, timeout=10)
-                print("Ping iberildi: Bot oýanyk!")
+            requests.get(RENDER_URL, timeout=10)
+            print("Ping iberildi: Bot oýanyk!")
         except Exception as e:
             print(f"Ping hatasy: {e}")
         time.sleep(300)
 
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+# Web Serveri Arka Planda Başlatmak
+def run_flask():
+    port = int(os.environ.get("PORT", 10000))
+    flask_app.run(host="0.0.0.0", port=port, use_reloader=False)
 
 # --- ESASY SAZLAMALAR ---
 BOT_TOKEN = "7846603711:AAHvjcqfwEe7VG2EVnD1krqQsa6v8D6Zy3Y"
@@ -88,12 +94,8 @@ async def sms_gelende(update: Update, context: ContextTypes.DEFAULT_TYPE):
     isleg = context.user_data.get('isleg')
     text = update.message.text.strip()
 
-    # 1. KANAL GOŞMAK
-    if isleg == "AYAK_KANAL_GOS" or ("|" in text and ("-100" in text or text.split('|')[0].strip().replace('-', '').isdigit())):
-        if "|" not in text:
-            await update.message.reply_text("❌ Format nädogry! Dogry format:\n`-100123456789 | https://t.me/kanal_linki` \n\nÝatyrmak üçin: /start")
-            return
-            
+    # ⭐ KANAL GOŞMAK
+    if "|" in text and ("-100" in text or text.split('|')[0].strip().replace('-', '').isdigit()):
         try:
             k_id, k_link = [x.strip() for x in text.split('|')]
             
@@ -114,11 +116,11 @@ async def sms_gelende(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data.clear()
             return
         except Exception:
-            await update.message.reply_text("❌ Bir hata ýüze çykdy! Nusga formatda ýazyň:\n`-1001234567 | https://t.me/link` \n\nÝatyrmak üçin: /start")
+            await update.message.reply_text("❌ Nädogry format! Nusga: `-1001234567 | https://t.me/link` \n\nÝatyrmak üçin: /start")
             return
 
     # 2. ADMİN GOŞMAK
-    elif isleg == "AYAK_ADMIN_GOS" and user_id == KURUCU_ID:
+    if isleg == "AYAK_ADMIN_GOS" and user_id == KURUCU_ID:
         if not text.isdigit():
             await update.message.reply_text("❌ ID diňe sanlardan ybarat bolmalydyr!")
             return
@@ -300,10 +302,9 @@ async def duwmeler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     sowly += 1
                 except Exception:
                     hata += 1
-            
+                    
             conn = sqlite3.connect('vpn_bot.db')
             cursor = conn.cursor()
-            cursor.execute("INSERT OR IGNORE INTO adminler (user_id, paylasim_sayisi) VALUES (?, 0)", (user_id,))
             cursor.execute("UPDATE adminler SET paylasim_sayisi = paylasim_sayisi + 1 WHERE user_id = ?", (user_id,))
             conn.commit()
             conn.close()
@@ -312,18 +313,20 @@ async def duwmeler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data.clear()
 
 # --- MAIN RUNNER FUNCTION ---
-def run_telegram_bot():
+def main():
+    # 1. Web Serveri we Ping Sistemini Arka Planda Başlatmak
+    threading.Thread(target=run_flask, daemon=True).start()
+    threading.Thread(target=self_ping, daemon=True).start()
+    
+    # 2. Telegram Botuny Esasy Potokda (Main Thread) Döwrebap Başlatmak
     application = Application.builder().token(BOT_TOKEN).build()
     application.add_handler(CallbackQueryHandler(duwmeler))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, sms_gelende))
     application.add_handler(CommandHandler("start", start))
+    
+    print("Bot we Web Server sinhronizasiýasy doly durnuklaşdyryldy. Diňlenilýär...")
     application.run_polling(close_loop=False)
 
 if __name__ == '__main__':
-    threading.Thread(target=self_ping, daemon=True).start()
-    port = int(os.environ.get("PORT", 10000))
-    threading.Thread(target=lambda: flask_app.run(host="0.0.0.0", port=port, use_reloader=False), daemon=True).start()
-    
-    print("Web Server we Bot Render üçin taýýar...")
-    run_telegram_bot()
+    main()
     
