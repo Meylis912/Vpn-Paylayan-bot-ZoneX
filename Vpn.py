@@ -9,132 +9,111 @@ from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQu
 from telegram.error import TelegramError
 from pymongo import MongoClient
 
-# ---------------- FLASK ----------------
+# --- FLASK WE ANTI-SLEEP ---
 flask_app = Flask(__name__)
-
 RENDER_URL = "https://vpn-bot-z9rj.onrender.com"
 
 @flask_app.route("/")
 def home():
     return "Bot is Alive!", 200
 
-
 def self_ping():
     time.sleep(20)
-    print("Anti-Sleep aktif...")
+    print("Anti-Sleep ulgamy işjeňleşdirildi...")
     while True:
         try:
             requests.get(RENDER_URL, timeout=10)
-            print("Ping OK")
+            print("Ping iberildi: Bot oýanyk!")
         except Exception as e:
-            print(f"Ping error: {e}")
+            print(f"Ping hatasy: {e}")
         time.sleep(300)
 
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
-# ---------------- LOGGING ----------------
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
-)
-
-# ---------------- BOT SETTINGS ----------------
+# --- ESASY SAZLAMALAR ---
 BOT_TOKEN = "7846603711:AAHvjcqfwEe7VG2EVnD1krqQsa6v8D6Zy3Y"
 KURUCU_ID = 7523674506
 
-# ---------------- MONGO ----------------
+# --- MONGODB BAGLANYŞYGY ---
 MONGO_URI = "mongodb+srv://mergenowlyagulyyew41_db_user:ZvZhOKOAF6ZMRbHX@cluster1.l8z8gll.mongodb.net/vpn_telegram_bot?retryWrites=true&w=majority&appName=Cluster1"
-
 mongo_client = MongoClient(MONGO_URI)
-db = mongo_client["vpn_telegram_bot"]
-db_adminler = db["adminler"]
-db_kanallar = db["kanallar"]
+db = mongo_client['vpn_telegram_bot']
+db_adminler = db['adminler']
+db_kanallar = db['kanallar']
 
-# ---------------- HELPERS ----------------
+# --- ÝARDÝMCY FUNKSIÝALAR ---
 def admin_mi(user_id):
     if user_id == KURUCU_ID:
         return True
-    return db_adminler.find_one({"user_id": int(user_id)}) is not None
+    res = db_adminler.find_one({"user_id": int(user_id)})
+    return res is not None
 
-
-# ---------------- START ----------------
+# --- BAŞ MENU (/start) ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-
     if not admin_mi(user_id):
-        await update.message.reply_text("⛔ Giriş gadagan!")
+        await update.message.reply_text("⛔ Geçiş gadagan! Bu boty diňe Esasy Gurujy we Adminler ulanyp biler.")
         return
 
     context.user_data.clear()
 
     keyboard = [
-        [InlineKeyboardButton("🔗 VPN Paýlaş", callback_data="menu_vpn")],
-        [InlineKeyboardButton("➕ Kanal Goş", callback_data="menu_add_channel")],
-        [InlineKeyboardButton("📊 Statistika", callback_data="menu_stats")]
+        [InlineKeyboardButton("🔗 VPN Link Paýlaş", callback_data="menu_vpn_paylas")],
+        [InlineKeyboardButton("➕ Kanal Goş", callback_data="menu_kanal_gos"),
+         InlineKeyboardButton("➖ Kanal Poz", callback_data="menu_kanal_poz")],
+        [InlineKeyboardButton("📊 Statistika", callback_data="menu_statistika")]
     ]
 
     if user_id == KURUCU_ID:
-        keyboard.append([
-            InlineKeyboardButton("👤 Admin Goş", callback_data="menu_add_admin")
-        ])
+        keyboard.append([InlineKeyboardButton("👤 Admin Goş", callback_data="menu_admin_gos"),
+                         InlineKeyboardButton("🗑️ Admin Poz", callback_data="menu_admin_poz")])
 
-    await update.message.reply_text(
-        "VPN Panel",
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text("🔮 **VPN Dolandyryş Paneline Hoş Geldiňiz!**\nEtmek isleýän işiňizi saýlaň:", reply_markup=reply_markup)
 
-
-# ---------------- MESSAGE HANDLER ----------------
-async def sms(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# --- TEKST GIRDILERINI DOLANDYRYŞ ---
+async def sms_gelende(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    if not admin_mi(user_id):
-        return
+    if not admin_mi(user_id): return
 
-    text = update.message.text.strip()
-    isleg = context.user_data.get("isleg")
+    isleg = context.user_data.get('isleg')
+    text = update.message.text.strip() if update.message.text else ""
 
-    # ---------- KANAL EKLEME FIX ----------
-    if "|" in text and "-100" in text:
+    # ⭐ KANAL GOŞMAK
+    if "|" in text and ("-100" in text or text.split('|')[0].strip().replace('-', '').isdigit()):
         try:
-            parts = text.split("|")
+            k_id, k_link = [x.strip() for x in text.split('|', 1)]
 
-            if len(parts) < 2:
-                await update.message.reply_text("❌ Format: -100ID | link")
-                return
+            # ID-ni normalize et (boşluk ýok, arassa string)
+            k_id = str(k_id).strip().replace(" ", "")
+            k_link = str(k_link).strip()
 
-            k_id = int(parts[0].strip())
-            k_link = parts[1].strip()
-
-            # ❗ DUPLICATE CHECK (EN ÖNEMLİ FIX)
-            if db_kanallar.find_one({"kanal_id": k_id}):
-                await update.message.reply_text("⚠️ Bu kanal zaten eklenmiş!")
-                return
-
-            # Telegram test
+            # Botuň kanaldaky rugsady barlanylýar
             try:
-                msg = await context.bot.send_message(chat_id=k_id, text="test")
-                await context.bot.delete_message(chat_id=k_id, message_id=msg.message_id)
+                test_msg = await context.bot.send_message(chat_id=k_id, text="⚙️ Barlag sms...")
+                await context.bot.delete_message(chat_id=k_id, message_id=test_msg.message_id)
             except TelegramError:
-                await update.message.reply_text("❌ Bot admin değil veya izin yok!")
+                await update.message.reply_text(f"⚠️ **Duýduryş!** Bot `{k_id}` kanalynda admin däl ýa-da **Post ugratma rugsady ýok!** Ilki admin ediň.")
                 return
 
-            # Mongo insert (overwrite FIXED)
-            db_kanallar.insert_one({
-                "kanal_id": k_id,
-                "kanal_link": k_link
-            })
+            # ✅ FIX: Ilki şol ID bilen bar bolan ähli köne ýazgylary poz, soňra täze ýaz
+            # Bu usul hiç wagt öňki kanaly ýitirmeýär — diňe şol k_id üçin täzelenýär
+            db_kanallar.delete_many({"kanal_id": k_id})
+            db_kanallar.insert_one({"kanal_id": k_id, "kanal_link": k_link})
 
-            await update.message.reply_text("✅ Kanal goşuldy!")
+            print(f"✅ Maglumat bazasyna ýazyldy: {k_id} -> {k_link}")
+
+            await update.message.reply_text(f"✅ **Kanal üstünlikli goşuldy!**\n🆔 ID: `{k_id}`\n🔗 Link: {k_link}\n\nBaş Menu: /start")
             context.user_data.clear()
             return
-
         except Exception as e:
-            await update.message.reply_text(f"❌ Error: {e}")
+            await update.message.reply_text(f"❌ Ýalňyşlyk ýüze çykdy: {e}\nNusga format: `-1001234567 | https://t.me/link` \n\n/start")
             return
 
-    # ---------- ADMIN ADD ----------
-    if isleg == "add_admin" and user_id == KURUCU_ID:
+    # 2. ADMİN GOŞMAK
+    if isleg == "AYAK_ADMIN_GOS" and user_id == KURUCU_ID:
         if not text.isdigit():
-            await update.message.reply_text("❌ ID san bolmaly")
+            await update.message.reply_text("❌ ID diňe sanlardan ybarat bolmalydyr!")
             return
 
         db_adminler.update_one(
@@ -142,52 +121,172 @@ async def sms(update: Update, context: ContextTypes.DEFAULT_TYPE):
             {"$setOnInsert": {"paylasim_sayisi": 0}},
             upsert=True
         )
-
-        await update.message.reply_text("✅ Admin goşuldy")
+        await update.message.reply_text(f"✅ `{text}` ID-li ulanyjy Admin edildi!\n\nBaş Menu: /start")
         context.user_data.clear()
         return
 
-
-# ---------------- CALLBACKS ----------------
-async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    q = update.callback_query
-    await q.answer()
-
-    user_id = q.from_user.id
-    data = q.data
-
-    if not admin_mi(user_id):
+    # 3. VPN LİNKINI ALMAK
+    elif isleg == "AYAK_VPN_LINK_AL":
+        context.user_data['vpn_link'] = text
+        context.user_data['isleg'] = "AYAK_VPN_DESC_AL"
+        await update.message.reply_text("📝 Indi bolsa şol VPN linkiniň yzyndan goşuljak **Düşündiriş tekstini (Description)** ýazyň:")
         return
 
-    if data == "menu_add_channel":
-        context.user_data["isleg"] = "add_channel"
-        await q.message.reply_text("Format: -100ID | link")
+    # 4. DESCRIPTION ALMAK
+    elif isleg == "AYAK_VPN_DESC_AL":
+        context.user_data['vpn_desc'] = text
+        context.user_data['secili_kanallar'] = []
+        context.user_data['isleg'] = None
+        await vpn_paneli_goster(update.message.reply_text, context)
+        return
 
-    elif data == "menu_add_admin":
-        context.user_data["isleg"] = "add_admin"
-        await q.message.reply_text("Admin ID yaz")
+# --- VPN PAÝLAŞYŞ PANELY ---
+async def vpn_paneli_goster(gorkez_func, context: ContextTypes.DEFAULT_TYPE, edit=False):
+    kanallar = list(db_kanallar.find({}))
 
+    secili = context.user_data.get('secili_kanallar', [])
+    hepsi_secili = len(secili) == len(kanallar) and len(kanallar) > 0
 
-# ---------------- RUN BOT ----------------
-def run_bot():
-    app = Application.builder().token(BOT_TOKEN).build()
+    ust_satir = [
+        InlineKeyboardButton("✅ Ählisini Saýla" if not hepsi_secili else "🟩 Ählisi Saýlandy", callback_data="v_HEPSI"),
+        InlineKeyboardButton("🚀 PAÝLAŞ", callback_data="v_PAYLAS_ET")
+    ]
+    keyboard = [ust_satir]
 
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, sms))
-    app.add_handler(CallbackQueryHandler(buttons))
+    for k in kanallar:
+        k_id = str(k.get('kanal_id'))
+        k_link = str(k.get('kanal_link', 'Link ýok'))
+        isaret = "🟢" if k_id in secili else "🔴"
+        keyboard.append([InlineKeyboardButton(f"{isaret} {k_link}", callback_data=f"v_sec_{k_id}")])
 
-    app.run_polling(close_loop=False)
+    reply_markup = InlineKeyboardMarkup(keyboard)
 
+    vpn_link = context.user_data.get('vpn_link', '')
+    vpn_desc = context.user_data.get('vpn_desc', '')
 
-# ---------------- MAIN ----------------
-if __name__ == "__main__":
+    post_gornus = "👁️ **Postuň kanaldaky görnüşi:**\n\n" + f"`{vpn_link}`\n" + f"{vpn_desc}\n\n" + "Paýlaşyljak kanallary aşakdan saýlaň:"
+
+    if edit:
+        try: await gorkez_func(text=post_gornus, reply_markup=reply_markup, parse_mode="Markdown")
+        except Exception: pass
+    else:
+        await gorkez_func(text=post_gornus, reply_markup=reply_markup, parse_mode="Markdown")
+
+# --- DÜWMELERIŇ IŞLEÝIŞI ---
+async def duwmeler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    data = query.data
+    user_id = query.from_user.id
+
+    if not admin_mi(user_id): return
+
+    if data == "menu_kanal_gos":
+        context.user_data['isleg'] = "AYAK_KANAL_GOS"
+        await query.message.reply_text("👉 Goşmak isleýän kanalyňyzyň **ID-sini** we **Linkini** şu formatda iberiň:\n\n`-100123456789 | https://t.me/kanal_linki`")
+
+    elif data == "menu_admin_gos" and user_id == KURUCU_ID:
+        context.user_data['isleg'] = "AYAK_ADMIN_GOS"
+        await query.message.reply_text("👤 Goşmak isleýän täze adminiňiziň **Telegram ID**-sini ýazyň:")
+
+    elif data == "menu_vpn_paylas":
+        context.user_data['isleg'] = "AYAK_VPN_LINK_AL"
+        await query.message.reply_text("🔗 Lütfen, kanallara ugratmak isleýän **VPN Linkiňizi** ýazyň:")
+
+    elif data == "menu_kanal_poz" and user_id == KURUCU_ID:
+        kanallar = list(db_kanallar.find({}))
+        if not kanallar:
+            await query.message.reply_text("📭 Hasaba alnan kanal tapylmady.")
+            return
+        keyboard = [[InlineKeyboardButton(f"❌ {k.get('kanal_link')}", callback_data=f"goni_kpoz_{k.get('kanal_id')}")] for k in kanallar]
+        await query.message.reply_text("🗑️ Silmek islan kanalyňyzy saýlaň (Diňe Gurujy):", reply_markup=InlineKeyboardMarkup(keyboard))
+
+    elif data.startswith("goni_kpoz_") and user_id == KURUCU_ID:
+        k_id = str(data.replace("goni_kpoz_", ""))
+        db_kanallar.delete_one({"kanal_id": k_id})
+        await query.message.edit_text("✅ Kanal maglumat binasyndan pozuldy! /start")
+
+    elif data == "menu_admin_poz" and user_id == KURUCU_ID:
+        adminler = list(db_adminler.find({}, {"_id": 0, "user_id": 1}))
+        if not adminler:
+            await query.message.reply_text("👥 Admin tapylmady.")
+            return
+        keyboard = [[InlineKeyboardButton(f"🗑️ Admin: {a['user_id']}", callback_data=f"goni_apoz_{a['user_id']}")] for a in adminler]
+        await query.message.reply_text("Silmek isleýän adminiňizi saýlaň:", reply_markup=InlineKeyboardMarkup(keyboard))
+
+    elif data.startswith("goni_apoz_") and user_id == KURUCU_ID:
+        a_id = data.replace("goni_apoz_", "")
+        db_adminler.delete_one({"user_id": int(a_id)})
+        await query.message.edit_text(f"✅ {a_id} ID-li admin pozuldy! /start")
+
+    elif data == "menu_statistika":
+        jemi_kanal = db_kanallar.count_documents({})
+        admin_list = list(db_adminler.find({}, {"_id": 0, "user_id": 1, "paylasim_sayisi": 1}))
+
+        txt = f"📊 **BOT STATİSTİKASY**\n\n📢 Botuň admin bolan jemi kanallary: **{jemi_kanal}**\n\n👥 **Adminleriň paýlaşyk sany:**\n"
+        for adm in admin_list:
+            txt += f"├─ Admin ID (`{adm['user_id']}`): {adm.get('paylasim_sayisi', 0)} gezek paýlaşdy.\n"
+        await query.message.reply_text(txt, parse_mode="Markdown")
+
+    elif data == "v_HEPSI" or data.startswith("v_sec_") or data == "v_PAYLAS_ET":
+        tum_kanal_idleri = [str(x['kanal_id']) for x in db_kanallar.find({})]
+        secili = context.user_data.get('secili_kanallar', [])
+
+        if data == "v_HEPSI":
+            if len(secili) == len(tum_kanal_idleri):
+                context.user_data['secili_kanallar'] = []
+            else:
+                context.user_data['secili_kanallar'] = tum_kanal_idleri.copy()
+            await vpn_paneli_goster(query.message.edit_text, context, edit=True)
+
+        elif data.startswith("v_sec_"):
+            k_id = str(data.replace("v_sec_", ""))
+            if k_id in secili: secili.remove(k_id)
+            else: secili.append(k_id)
+            context.user_data['secili_kanallar'] = secili
+            await vpn_paneli_goster(query.message.edit_text, context, edit=True)
+
+        elif data == "v_PAYLAS_ET":
+            vpn_link = context.user_data.get('vpn_link')
+            vpn_desc = context.user_data.get('vpn_desc', '')
+            hedef_kanallar = context.user_data.get('secili_kanallar', [])
+
+            if not hedef_kanallar:
+                await query.message.reply_text("❌ Lütfen, ilki aşakdan paýlaşyljak kanallary saýlaň!")
+                return
+
+            sonky_sms = f"`{vpn_link}`\n{vpn_desc}"
+            sowly = 0
+            hata = 0
+
+            for cid in hedef_kanallar:
+                try:
+                    await context.bot.send_message(chat_id=cid, text=sonky_sms, parse_mode="Markdown")
+                    sowly += 1
+                except Exception:
+                    hata += 1
+
+            db_adminler.update_one(
+                {"user_id": user_id},
+                {"$inc": {"paylasim_sayisi": 1}},
+                upsert=True
+            )
+
+            await query.message.edit_text(f"🚀 **Paýlaşyk tamamlandy!**\n\n✅ Şowly ugradylan: {sowly} kanal.\n❌ Şowsuz (Rugsatsyz): {hata} kanal.")
+            context.user_data.clear()
+
+# --- MAIN ---
+def run_telegram_bot():
+    application = Application.builder().token(BOT_TOKEN).build()
+    application.add_handler(CallbackQueryHandler(duwmeler))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, sms_gelende))
+    application.add_handler(CommandHandler("start", start))
+    application.run_polling(close_loop=False)
+
+if __name__ == '__main__':
     threading.Thread(target=self_ping, daemon=True).start()
-
     port = int(os.environ.get("PORT", 10000))
-    threading.Thread(
-        target=lambda: flask_app.run(host="0.0.0.0", port=port, use_reloader=False),
-        daemon=True
-    ).start()
-
-    print("Bot running...")
-    run_bot()
+    threading.Thread(target=lambda: flask_app.run(host="0.0.0.0", port=port, use_reloader=False), daemon=True).start()
+    print("Web Server we Bot Render we MongoDB üçin doly taýýar edildi...")
+    run_telegram_bot()
+    
