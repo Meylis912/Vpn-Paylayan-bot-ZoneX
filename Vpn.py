@@ -4,14 +4,13 @@ import os
 import time
 import threading
 import requests
-from flask import Flask  # Render üçin gerek
+from flask import Flask
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
 from telegram.error import TelegramError
 
-# --- FLASK WE ANTI-SLEEP (RENDER UKLAMAZLYK GURLUŞY) ---
+# --- FLASK WE ANTI-SLEEP (RENDER ÜÇIN) ---
 flask_app = Flask(__name__)
-# Render sahypaňyzyň durnukly linki (Şuny öz Render linkiňiz bilen çalşyryň)
 RENDER_URL = "https://vpn-paylayan-zonex.onrender.com"  
 
 @flask_app.route("/")
@@ -27,9 +26,9 @@ def self_ping():
             print("Ping iberildi: Bot oýanyk!")
         except Exception as e:
             print(f"Ping hatasy: {e}")
-        time.sleep(300) # Her 5 minutdan özi özüne jaň edip uykudan açýar
+        time.sleep(300)
 
-# Loglama Sazlamalary
+# --- LOGLAMA SAZLAMALARY ---
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
 # --- ESASY SAZLAMALAR ---
@@ -89,20 +88,18 @@ async def sms_gelende(update: Update, context: ContextTypes.DEFAULT_TYPE):
     isleg = context.user_data.get('isleg')
     text = update.message.text.strip()
 
-    # ⭐ AKYLLY KANAL GOŞMAK (Düwme basylsa-da, basylmasa-da text-de '|' we '-100' bar bolsa göni goşar)
+    # ⭐ GÖNI KANAL GOŞMAK (Düwmesiz, göni 'ID | LINK' ugradylsa işleýär)
     if "|" in text and ("-100" in text or text.split('|')[0].strip().replace('-', '').isdigit()):
         try:
             k_id, k_link = [x.strip() for x in text.split('|')]
             
-            # Botuň kanaldaky rugsady barlanylýar
             try:
                 test_msg = await context.bot.send_message(chat_id=k_id, text="⚙️ Barlag sms...")
                 await context.bot.delete_message(chat_id=k_id, message_id=test_msg.message_id)
             except TelegramError:
-                await update.message.reply_text(f"⚠️ **Duýduryş!** Bot `{k_id}` kanalynda admin däl ýa-da **Habarlara Erşmek Rugsady ÝOK!** Ilki admin ediň.")
+                await update.message.reply_text(f"⚠️ **Duýduryş!** Bot `{k_id}` kanalynda admin däl ýa-da sms ugratmak rugsady ýok!")
                 return
 
-            # Maglumat binasyna goşmak
             conn = sqlite3.connect('vpn_bot.db')
             cursor = conn.cursor()
             cursor.execute("INSERT OR REPLACE INTO kanallar (kanal_id, kanal_link) VALUES (?, ?)", (k_id, k_link))
@@ -116,7 +113,7 @@ async def sms_gelende(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("❌ Nädogry format! Nusga: `-1001234567 | https://t.me/link` \n\nÝatyrmak üçin: /start")
             return
 
-    # 2. ADMİN GOŞMAK
+    # ADMİN GOŞMAK
     if isleg == "AYAK_ADMIN_GOS" and user_id == KURUCU_ID:
         if not text.isdigit():
             await update.message.reply_text("❌ ID diňe sanlardan ybarat bolmalydyr!")
@@ -131,14 +128,14 @@ async def sms_gelende(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data.clear()
         return
 
-    # 3. VPN LİNKINI ALMAK WE DESCRIPTION SORAMAK
+    # VPN LİNKINI ALMAK WE DESCRIPTION SORAMAK
     elif isleg == "AYAK_VPN_LINK_AL":
         context.user_data['vpn_link'] = text
         context.user_data['isleg'] = "AYAK_VPN_DESC_AL"
         await update.message.reply_text("📝 Indi bolsa şol VPN linkiniň yzyndan goşuljak **Düşündiriş tekstini (Description)** ýazyň:")
         return
 
-    # 4. DESCRIPTION ALMAK WE PANEL GÖRKEZMEK
+    # DESCRIPTION ALMAK WE PANEL GÖRKEZMEK
     elif isleg == "AYAK_VPN_DESC_AL":
         context.user_data['vpn_desc'] = text
         context.user_data['secili_kanallar'] = []
@@ -211,7 +208,7 @@ async def duwmeler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.message.reply_text("📭 Hasaba alnan kanal tapylmady.")
             return
         keyboard = [[InlineKeyboardButton(f"❌ {k[1]}", callback_data=f"goni_kpoz_{k[0]}")] for k in kanallar]
-        await query.message.reply_text("🗑️ Silmek islan kanalyňyzy saýlaň (Diňe Gurujy):", reply_markup=InlineKeyboardMarkup(keyboard))
+        await query.message.reply_text("🗑️ Silmek islan kanalyňyzy saýlaň:", reply_markup=InlineKeyboardMarkup(keyboard))
 
     elif data.startswith("goni_kpoz_") and user_id == KURUCU_ID:
         k_id = data.replace("goni_kpoz_", "")
@@ -306,24 +303,25 @@ async def duwmeler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             conn.commit()
             conn.close()
             
-            await query.message.edit_text(f"🚀 **Paýlaşyk tamamlandy!**\n\n✅ Şowly ugradylan: {sowly} kanal.\n❌ Şowsuz (Rugsatsyz): {hata} kanal.")
+            await update.message.reply_text(f"🚀 **Paýlaşyk tamamlandy!**\n\n✅ Şowly ugradylan: {sowly} kanal.\n❌ Şowsuz (Rugsatsyz): {hata} kanal.")
             context.user_data.clear()
 
-# --- MAIN RUNNER FUNCTION ---
+# --- MAIN RUNNER (PYDROID DOŇMA ÝALŇYŞLYGY ŞU ÝERDE ÇÖZÜLDI) ---
 def run_telegram_bot():
     application = Application.builder().token(BOT_TOKEN).build()
     application.add_handler(CallbackQueryHandler(duwmeler))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, sms_gelende))
     application.add_handler(CommandHandler("start", start))
-    application.run_polling(close_loop=False)
+    
+    # 🌟 PYDROID RUNTIME ERROR ÇÖZÜGÜ: signals=None goşuldy!
+    application.run_polling(close_loop=False, signals=None)
 
 if __name__ == '__main__':
-    # Flask-yň arka planda uykudan açyjy gurluşy
     threading.Thread(target=self_ping, daemon=True).start()
     
-    # Flask web serverini parallel potokda işe girizýäris (Render Porty üçin)
     port = int(os.environ.get("PORT", 10000))
     threading.Thread(target=lambda: flask_app.run(host="0.0.0.0", port=port, use_reloader=False), daemon=True).start()
     
-    print("Web Server we Bot Render üçin doly taýýar edildi...")
+    print("Bot we Flask Server bökdençsiz açyldy...")
     run_telegram_bot()
+        
