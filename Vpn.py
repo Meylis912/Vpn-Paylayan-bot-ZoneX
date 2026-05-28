@@ -1,4 +1,4 @@
-import logging
+ import logging
 import os
 import time
 import threading
@@ -36,7 +36,7 @@ logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s
 BOT_TOKEN = "7846603711:AAHvjcqfwEe7VG2EVnD1krqQsa6v8D6Zy3Y"
 KURUCU_ID = 7523674506  
 
-# --- MONGODB BAGLANYŞYGY (TÄZELENDI) ---
+# --- MONGODB BAGLANYŞYGY ---
 MONGO_URI = "mongodb+srv://mergenowlyagulyyew41_db_user:ZvZhOKOAF6ZMRbHX@cluster1.l8z8gll.mongodb.net/vpn_telegram_bot?retryWrites=true&w=majority&appName=Cluster1" 
 
 mongo_client = MongoClient(MONGO_URI)
@@ -97,8 +97,8 @@ async def sms_gelende(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             # MongoDB-ä goşmak
             db_kanallar.update_one(
-                {"kanal_id": k_id},
-                {"$set": {"kanal_link": k_link}},
+                {"kanal_id": str(k_id)},
+                {"$set": {"kanal_link": str(k_link)}},
                 upsert=True
             )
             
@@ -141,6 +141,7 @@ async def sms_gelende(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # --- VPN PAÝLAŞYŞ PANELY ---
 async def vpn_paneli_goster(gorkez_func, context: ContextTypes.DEFAULT_TYPE, edit=False):
+    # KURZOR HÖKMÜNDE DÄL-DE, DOLLY LIST (SANAW) HÖKMÜNDE ÇEKÝÄRIS
     kanallar = list(db_kanallar.find({}, {"_id": 0, "kanal_id": 1, "kanal_link": 1}))
     
     secili = context.user_data.get('secili_kanallar', [])
@@ -153,8 +154,8 @@ async def vpn_paneli_goster(gorkez_func, context: ContextTypes.DEFAULT_TYPE, edi
     keyboard = [ust_satir]
     
     for k in kanallar:
-        k_id = k['kanal_id']
-        k_link = k['kanal_link']
+        k_id = str(k['kanal_id'])
+        k_link = str(k['kanal_link'])
         isaret = "🟢" if k_id in secili else "🔴"
         keyboard.append([InlineKeyboardButton(f"{isaret} {k_link}", callback_data=f"v_sec_{k_id}")])
         
@@ -201,7 +202,7 @@ async def duwmeler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.message.reply_text("🗑️ Silmek islan kanalyňyzy saýlaň (Diňe Gurujy):", reply_markup=InlineKeyboardMarkup(keyboard))
 
     elif data.startswith("goni_kpoz_") and user_id == KURUCU_ID:
-        k_id = data.replace("goni_kpoz_", "")
+        k_id = str(data.replace("goni_kpoz_", ""))
         db_kanallar.delete_one({"kanal_id": k_id})
         await query.message.edit_text("✅ Kanal maglumat binasyndan pozuldy! /start")
 
@@ -228,7 +229,7 @@ async def duwmeler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.message.reply_text(txt, parse_mode="Markdown")
 
     elif data == "v_HEPSI" or data.startswith("v_sec_") or data == "v_PAYLAS_ET":
-        tum_kanal_idleri = [x['kanal_id'] for x in db_kanallar.find({}, {"kanal_id": 1})]
+        tum_kanal_idleri = [str(x['kanal_id']) for x in db_kanallar.find({}, {"kanal_id": 1})]
         secili = context.user_data.get('secili_kanallar', [])
         
         if data == "v_HEPSI":
@@ -239,7 +240,7 @@ async def duwmeler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await vpn_paneli_goster(query.message.edit_text, context, edit=True)
 
         elif data.startswith("v_sec_"):
-            k_id = data.replace("v_sec_", "")
+            k_id = str(data.replace("v_sec_", ""))
             if k_id in secili: secili.remove(k_id)
             else: secili.append(k_id)
             context.user_data['secili_kanallar'] = secili
