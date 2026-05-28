@@ -1,4 +1,4 @@
- import logging
+import logging
 import os
 import time
 import threading
@@ -80,33 +80,40 @@ async def sms_gelende(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not admin_mi(user_id): return
 
     isleg = context.user_data.get('isleg')
-    text = update.message.text.strip()
+    text = update.message.text.strip() if update.message.text else ""
 
-    # ⭐ AKYLLY KANAL GOŞMAK
+    # ⭐ AKYLLY KANAL GOŞMAK (FORMAT BARLAGY WE GÜÝÇLENDİRİLEN GOŞYŞ)
     if "|" in text and ("-100" in text or text.split('|')[0].strip().replace('-', '').isdigit()):
         try:
             k_id, k_link = [x.strip() for x in text.split('|')]
+            
+            # ID formatyny formatlap alalyň (Arassa string we san formaty)
+            k_id = str(k_id)
+            k_link = str(k_link)
             
             # Botuň kanaldaky rugsady barlanylýar
             try:
                 test_msg = await context.bot.send_message(chat_id=k_id, text="⚙️ Barlag sms...")
                 await context.bot.delete_message(chat_id=k_id, message_id=test_msg.message_id)
             except TelegramError:
-                await update.message.reply_text(f"⚠️ **Duýduryş!** Bot `{k_id}` kanalynda admin däl ýa-da **Habarlara Erşmek Rugsady ÝOK!** Ilki admin ediň.")
+                await update.message.reply_text(f"⚠️ **Duýduryş!** Bot `{k_id}` kanalynda admin däl ýa-da **Post ugratma rugsady ýok!** Ilki admin ediň.")
                 return
 
-            # MongoDB-ä goşmak
+            # MONGODB-Ä BERK ÝAZMAK (Eger öň bar bolsa-da üstüne ýazmasyn, täze resminama hökmünde berkitsin)
             db_kanallar.update_one(
-                {"kanal_id": str(k_id)},
-                {"$set": {"kanal_link": str(k_link)}},
+                {"kanal_id": k_id},
+                {"$set": {"kanal_link": k_link}},
                 upsert=True
             )
             
-            await update.message.reply_text("✅ **Kanal üstünlikli goşuldy!**\n\nBaş Menu: /start")
+            # Barlag logy (Render terminalynda görmek üçin)
+            print(f"✅ Maglumat bazasyna ýazyldy: {k_id} -> {k_link}")
+            
+            await update.message.reply_text(f"✅ **Kanal üstünlikli goşuldy!**\n🆔 ID: `{k_id}`\n🔗 Link: {k_link}\n\nBaş Menu: /start")
             context.user_data.clear()
             return
-        except Exception:
-            await update.message.reply_text("❌ Nädogry format! Nusga: `-1001234567 | https://t.me/link` \n\nÝatyrmak üçin: /start")
+        except Exception as e:
+            await update.message.reply_text(f"❌ Ýalňyşlyk ýüze çykdy: {e}\nNusga format: `-1001234567 | https://t.me/link` \n\n/start")
             return
 
     # 2. ADMİN GOŞMAK
@@ -141,8 +148,8 @@ async def sms_gelende(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # --- VPN PAÝLAŞYŞ PANELY ---
 async def vpn_paneli_goster(gorkez_func, context: ContextTypes.DEFAULT_TYPE, edit=False):
-    # KURZOR HÖKMÜNDE DÄL-DE, DOLLY LIST (SANAW) HÖKMÜNDE ÇEKÝÄRIS
-    kanallar = list(db_kanallar.find({}, {"_id": 0, "kanal_id": 1, "kanal_link": 1}))
+    # Ähli kanallary täzeden noldan çekýäris (Häzirki wagtda bazada näme bar bolsa)
+    kanallar = list(db_kanallar.find({}))
     
     secili = context.user_data.get('secili_kanallar', [])
     hepsi_secili = len(secili) == len(kanallar) and len(kanallar) > 0
@@ -154,8 +161,8 @@ async def vpn_paneli_goster(gorkez_func, context: ContextTypes.DEFAULT_TYPE, edi
     keyboard = [ust_satir]
     
     for k in kanallar:
-        k_id = str(k['kanal_id'])
-        k_link = str(k['kanal_link'])
+        k_id = str(k.get('kanal_id'))
+        k_link = str(k.get('kanal_link', 'Link ýok'))
         isaret = "🟢" if k_id in secili else "🔴"
         keyboard.append([InlineKeyboardButton(f"{isaret} {k_link}", callback_data=f"v_sec_{k_id}")])
         
@@ -194,11 +201,11 @@ async def duwmeler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.message.reply_text("🔗 Lütfen, kanallara ugratmak isleýän **VPN Linkiňizi** ýazyň:")
 
     elif data == "menu_kanal_poz" and user_id == KURUCU_ID:
-        kanallar = list(db_kanallar.find({}, {"_id": 0, "kanal_id": 1, "kanal_link": 1}))
+        kanallar = list(db_kanallar.find({}))
         if not kanallar:
             await query.message.reply_text("📭 Hasaba alnan kanal tapylmady.")
             return
-        keyboard = [[InlineKeyboardButton(f"❌ {k['kanal_link']}", callback_data=f"goni_kpoz_{k['kanal_id']}")] for k in kanallar]
+        keyboard = [[InlineKeyboardButton(f"❌ {k.get('kanal_link')}", callback_data=f"goni_kpoz_{k.get('kanal_id')}")] for k in kanallar]
         await query.message.reply_text("🗑️ Silmek islan kanalyňyzy saýlaň (Diňe Gurujy):", reply_markup=InlineKeyboardMarkup(keyboard))
 
     elif data.startswith("goni_kpoz_") and user_id == KURUCU_ID:
@@ -229,7 +236,7 @@ async def duwmeler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.message.reply_text(txt, parse_mode="Markdown")
 
     elif data == "v_HEPSI" or data.startswith("v_sec_") or data == "v_PAYLAS_ET":
-        tum_kanal_idleri = [str(x['kanal_id']) for x in db_kanallar.find({}, {"kanal_id": 1})]
+        tum_kanal_idleri = [str(x['kanal_id']) for x in db_kanallar.find({})]
         secili = context.user_data.get('secili_kanallar', [])
         
         if data == "v_HEPSI":
@@ -293,4 +300,4 @@ if __name__ == '__main__':
     
     print("Web Server we Bot Render we MongoDB üçin doly taýýar edildi...")
     run_telegram_bot()
-    
+ 
