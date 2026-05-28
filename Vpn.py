@@ -100,10 +100,16 @@ async def sms_gelende(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return
 
             # MONGODB-Ä BERK ÝAZMAK (Eger öň bar bolsa-da üstüne ýazmasyn, täze resminama hökmünde berkitsin)
-            db_kanallar.update_one(
-                {"kanal_id": k_id},
-                {"$set": {"kanal_link": k_link}},
-                upsert=True
+            bar_mi = db_kanallar.find_one({"kanal_id": k_id})
+
+if bar_mi:
+    await update.message.reply_text("⚠️ Bu kanal öň goşulan!")
+    return
+
+db_kanallar.insert_one({
+    "kanal_id": k_id,
+    "kanal_link": k_link
+})
             )
             
             # Barlag logy (Render terminalynda görmek üçin)
