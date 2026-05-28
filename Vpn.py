@@ -79,13 +79,19 @@ async def sms_gelende(update: Update, context: ContextTypes.DEFAULT_TYPE):
     isleg = context.user_data.get('isleg')
     text = update.message.text.strip() if update.message.text else ""
 
+    if not isleg:
+        await update.message.reply_text("⚠️ Lütfen, ilki menudan bir iş saýlaň! /start")
+        return
+
     # ⭐ KANAL GOŞMAK
-    if "|" in text and ("-100" in text or text.split('|')[0].strip().replace('-', '').isdigit()):
+    if isleg == "AYAK_KANAL_GOS":
+        if "|" not in text:
+            await update.message.reply_text("❌ Formaty nädogry ýazdyňyz! Nusga format:\n`-100123456789 | https://t.me/kanal_linki` \n\n/start")
+            return
+            
         try:
             k_id, k_link = [x.strip() for x in text.split('|', 1)]
-
-            # ID-ni normalize et (boşluk ýok, arassa string)
-            k_id = str(k_id).strip().replace(" ", "")
+            k_id = str(k_id).replace(" ", "").strip()
             k_link = str(k_link).strip()
 
             # Botuň kanaldaky rugsady barlanylýar
@@ -96,22 +102,19 @@ async def sms_gelende(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.message.reply_text(f"⚠️ **Duýduryş!** Bot `{k_id}` kanalynda admin däl ýa-da **Post ugratma rugsady ýok!** Ilki admin ediň.")
                 return
 
-            # ✅ FIX: Ilki şol ID bilen bar bolan ähli köne ýazgylary poz, soňra täze ýaz
-            # Bu usul hiç wagt öňki kanaly ýitirmeýär — diňe şol k_id üçin täzelenýär
+            # Dublikat bolmazlygy üçin şol ID-li köne maglumaty pozup, täzeden arassa ýazýarys
             db_kanallar.delete_many({"kanal_id": k_id})
             db_kanallar.insert_one({"kanal_id": k_id, "kanal_link": k_link})
-
-            print(f"✅ Maglumat bazasyna ýazyldy: {k_id} -> {k_link}")
 
             await update.message.reply_text(f"✅ **Kanal üstünlikli goşuldy!**\n🆔 ID: `{k_id}`\n🔗 Link: {k_link}\n\nBaş Menu: /start")
             context.user_data.clear()
             return
         except Exception as e:
-            await update.message.reply_text(f"❌ Ýalňyşlyk ýüze çykdy: {e}\nNusga format: `-1001234567 | https://t.me/link` \n\n/start")
+            await update.message.reply_text(f"❌ Ýalňyşlyk ýüze çykdy: {e}\n\n/start")
             return
 
     # 2. ADMİN GOŞMAK
-    if isleg == "AYAK_ADMIN_GOS" and user_id == KURUCU_ID:
+    elif isleg == "AYAK_ADMIN_GOS" and user_id == KURUCU_ID:
         if not text.isdigit():
             await update.message.reply_text("❌ ID diňe sanlardan ybarat bolmalydyr!")
             return
@@ -154,8 +157,8 @@ async def vpn_paneli_goster(gorkez_func, context: ContextTypes.DEFAULT_TYPE, edi
     keyboard = [ust_satir]
 
     for k in kanallar:
-        k_id = str(k.get('kanal_id'))
-        k_link = str(k.get('kanal_link', 'Link ýok'))
+        k_id = str(k.get('kanal_id')).strip()
+        k_link = str(k.get('kanal_link', 'Link ýok')).strip()
         isaret = "🟢" if k_id in secili else "🔴"
         keyboard.append([InlineKeyboardButton(f"{isaret} {k_link}", callback_data=f"v_sec_{k_id}")])
 
@@ -202,8 +205,8 @@ async def duwmeler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.message.reply_text("🗑️ Silmek islan kanalyňyzy saýlaň (Diňe Gurujy):", reply_markup=InlineKeyboardMarkup(keyboard))
 
     elif data.startswith("goni_kpoz_") and user_id == KURUCU_ID:
-        k_id = str(data.replace("goni_kpoz_", ""))
-        db_kanallar.delete_one({"kanal_id": k_id})
+        k_id = str(data.replace("goni_kpoz_", "")).strip()
+        db_kanallar.delete_many({"kanal_id": k_id})
         await query.message.edit_text("✅ Kanal maglumat binasyndan pozuldy! /start")
 
     elif data == "menu_admin_poz" and user_id == KURUCU_ID:
@@ -229,8 +232,11 @@ async def duwmeler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.message.reply_text(txt, parse_mode="Markdown")
 
     elif data == "v_HEPSI" or data.startswith("v_sec_") or data == "v_PAYLAS_ET":
-        tum_kanal_idleri = [str(x['kanal_id']) for x in db_kanallar.find({})]
-        secili = context.user_data.get('secili_kanallar', [])
+        kanallar_list = list(db_kanallar.find({}))
+        tum_kanal_idleri = [str(x['kanal_id']).strip() for x in kanallar_list]
+        
+        # Ýatda saklanan saýlananlary arassa setir görnüşinde alýarys
+        secili = [str(x).strip() for x in context.user_data.get('secili_kanallar', [])]
 
         if data == "v_HEPSI":
             if len(secili) == len(tum_kanal_idleri):
@@ -240,9 +246,13 @@ async def duwmeler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await vpn_paneli_goster(query.message.edit_text, context, edit=True)
 
         elif data.startswith("v_sec_"):
-            k_id = str(data.replace("v_sec_", ""))
-            if k_id in secili: secili.remove(k_id)
-            else: secili.append(k_id)
+            k_id = str(data.replace("v_sec_", "")).strip()
+            
+            if k_id in secili:
+                secili.remove(k_id)
+            else:
+                secili.append(k_id)
+                
             context.user_data['secili_kanallar'] = secili
             await vpn_paneli_goster(query.message.edit_text, context, edit=True)
 
@@ -259,7 +269,10 @@ async def duwmeler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             sowly = 0
             hata = 0
 
-            for cid in hedef_kanallar:
+            # 🛑 SET(HEDEF_KANALLAR) ARKALY DIŇE GARAŞSYZ ID-LERE UGRADYLÝAR (DUBLIKAT ASSLA BOLMAZ!)
+            arassa_kanallar = list(set([str(x).strip() for x in hedef_kanallar]))
+
+            for cid in arassa_kanallar:
                 try:
                     await context.bot.send_message(chat_id=cid, text=sonky_sms, parse_mode="Markdown")
                     sowly += 1
