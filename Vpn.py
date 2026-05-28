@@ -3,6 +3,7 @@ import sqlite3
 import os
 import time
 import threading
+import asyncio
 import requests
 from flask import Flask
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -11,7 +12,7 @@ from telegram.error import TelegramError
 
 # --- FLASK WE ANTI-SLEEP (RENDER ÜÇIN) ---
 flask_app = Flask(__name__)
-RENDER_URL = "https://vpn-paylayan-bot.onrender.com"  
+RENDER_URL = "https://vpn-bot-z9rj.onrender.com"  
 
 @flask_app.route("/")
 def home():
@@ -28,7 +29,7 @@ def self_ping():
             print(f"Ping hatasy: {e}")
         time.sleep(300)
 
-# --- LOGLAMA SAZLAMALARY ---
+# Loglama Sazlamalary
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
 # --- ESASY SAZLAMALAR ---
@@ -88,16 +89,16 @@ async def sms_gelende(update: Update, context: ContextTypes.DEFAULT_TYPE):
     isleg = context.user_data.get('isleg')
     text = update.message.text.strip()
 
-    # ⭐ GÖNI KANAL GOŞMAK (Düwmesiz, göni 'ID | LINK' ugradylsa işleýär)
+    # ⭐ AKYLLY KANAL GOŞMAK
     if "|" in text and ("-100" in text or text.split('|')[0].strip().replace('-', '').isdigit()):
         try:
             k_id, k_link = [x.strip() for x in text.split('|')]
             
             try:
-                test_msg = await context.bot.send_message(chat_id=k_id, text="⚙️ Barlag sms...")
+                test_msg = await context.bot.send_message(chat_id=k_id, text="⚙️ Barlag...")
                 await context.bot.delete_message(chat_id=k_id, message_id=test_msg.message_id)
             except TelegramError:
-                await update.message.reply_text(f"⚠️ **Duýduryş!** Bot `{k_id}` kanalynda admin däl ýa-da sms ugratmak rugsady ýok!")
+                await update.message.reply_text(f"⚠️ **Duýduryş!** Bot `{k_id}` kanalynda admin däl ýa-da sms rugsady ýok!")
                 return
 
             conn = sqlite3.connect('vpn_bot.db')
@@ -110,13 +111,13 @@ async def sms_gelende(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data.clear()
             return
         except Exception:
-            await update.message.reply_text("❌ Nädogry format! Nusga: `-1001234567 | https://t.me/link` \n\nÝatyrmak üçin: /start")
+            await update.message.reply_text("❌ Format nädogry. Nusga: `-1001234567 | https://t.me/link`")
             return
 
-    # ADMİN GOŞMAK
+    # ADMIN GOŞMAK
     if isleg == "AYAK_ADMIN_GOS" and user_id == KURUCU_ID:
         if not text.isdigit():
-            await update.message.reply_text("❌ ID diňe sanlardan ybarat bolmalydyr!")
+            await update.message.reply_text("❌ ID diňe san bolmalydyr!")
             return
         
         conn = sqlite3.connect('vpn_bot.db')
@@ -128,14 +129,14 @@ async def sms_gelende(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data.clear()
         return
 
-    # VPN LİNKINI ALMAK WE DESCRIPTION SORAMAK
+    # VPN LİNKINI ALMAK
     elif isleg == "AYAK_VPN_LINK_AL":
         context.user_data['vpn_link'] = text
         context.user_data['isleg'] = "AYAK_VPN_DESC_AL"
-        await update.message.reply_text("📝 Indi bolsa şol VPN linkiniň yzyndan goşuljak **Düşündiriş tekstini (Description)** ýazyň:")
+        await update.message.reply_text("📝 Indi bolsa VPN düşündiriş tekstini (Description) ýazyň:")
         return
 
-    # DESCRIPTION ALMAK WE PANEL GÖRKEZMEK
+    # DESCRIPTION ALMAK
     elif isleg == "AYAK_VPN_DESC_AL":
         context.user_data['vpn_desc'] = text
         context.user_data['secili_kanallar'] = []
@@ -177,7 +178,7 @@ async def vpn_paneli_goster(gorkez_func, context: ContextTypes.DEFAULT_TYPE, edi
     else:
         await gorkez_func(text=post_gornus, reply_markup=reply_markup, parse_mode="Markdown")
 
-# --- DÜWMELERIŇ IŞLEÝIŞI (CALLBACK QUERIES) ---
+# --- DÜWMELERIŇ IŞLEÝIŞI ---
 async def duwmeler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -249,7 +250,7 @@ async def duwmeler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         admin_list = cursor.fetchall()
         conn.close()
         
-        txt = f"📊 **BOT STATİSTİKASY**\n\n📢 Botuň admin bolan jemi kanallary: **{jemi_kanal}**\n\n👥 **Adminleriň paýlaşyk sany:**\n"
+        txt = f"📊 **BOT STATİSTİKASY**\n\n📢 Jemi kanallar: **{jemi_kanal}**\n\n👥 **Adminleriň paýlaşyk sany:**\n"
         for adm in admin_list:
             txt += f"├─ Admin ID (`{adm[0]}`): {adm[1]} gezek paýlaşdy.\n"
         await query.message.reply_text(txt, parse_mode="Markdown")
@@ -299,29 +300,5 @@ async def duwmeler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     
             conn = sqlite3.connect('vpn_bot.db')
             cursor = conn.cursor()
-            cursor.execute("UPDATE adminler SET paylasim_sayisi = paylasim_sayisi + 1 WHERE user_id = ?", (user_id,))
-            conn.commit()
-            conn.close()
-            
-            await update.message.reply_text(f"🚀 **Paýlaşyk tamamlandy!**\n\n✅ Şowly ugradylan: {sowly} kanal.\n❌ Şowsuz (Rugsatsyz): {hata} kanal.")
-            context.user_data.clear()
-
-# --- MAIN RUNNER (PYDROID DOŇMA ÝALŇYŞLYGY ŞU ÝERDE ÇÖZÜLDI) ---
-def run_telegram_bot():
-    application = Application.builder().token(BOT_TOKEN).build()
-    application.add_handler(CallbackQueryHandler(duwmeler))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, sms_gelende))
-    application.add_handler(CommandHandler("start", start))
-    
-    # 🌟 PYDROID RUNTIME ERROR ÇÖZÜGÜ: signals=None goşuldy!
-    application.run_polling(close_loop=False, signals=None)
-
-if __name__ == '__main__':
-    threading.Thread(target=self_ping, daemon=True).start()
-    
-    port = int(os.environ.get("PORT", 10000))
-    threading.Thread(target=lambda: flask_app.run(host="0.0.0.0", port=port, use_reloader=False), daemon=True).start()
-    
-    print("Bot we Flask Server bökdençsiz açyldy...")
-    run_telegram_bot()
+            cursor.execute("UPDATE adminler SET paylasim_sayisi = paylasim_sayisi
         
