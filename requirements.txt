@@ -2,5 +2,5 @@ python-telegram-bot
 pymongo
 requests
 flask
-quests==2.31.0
+requests==2.31.0
 flask==3.0.0
