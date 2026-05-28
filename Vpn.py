@@ -12,7 +12,7 @@ from telegram.error import TelegramError
 # --- FLASK WE ANTI-SLEEP (RENDER UKLAMAZLYK GURLUŞY) ---
 flask_app = Flask(__name__)
 # Render sahypaňyzyň durnukly linki (Şuny öz Render linkiňiz bilen çalşyryň)
-RENDER_URL = "https://vpn-bot-z9rj.onrender.com"  
+RENDER_URL = "https://vpn-paylayan-zonex.onrender.com"  
 
 @flask_app.route("/")
 def home():
