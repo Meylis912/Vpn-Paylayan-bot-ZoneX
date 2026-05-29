@@ -5,7 +5,12 @@ import threading
 import requests
 from flask import Flask
 from pymongo import MongoClient
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import (
+    Update,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup
+)
+
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -15,9 +20,9 @@ from telegram.ext import (
     ContextTypes
 )
 
-# ======================
+# =========================
 # 🌐 FLASK SERVER
-# ======================
+# =========================
 app_flask = Flask(__name__)
 
 RENDER_URL = os.getenv(
@@ -30,19 +35,25 @@ def home():
     return "Bot is Alive!", 200
 
 def keep_alive():
+
     time.sleep(15)
 
     while True:
+
         try:
-            requests.get(RENDER_URL, timeout=10)
+            requests.get(
+                RENDER_URL,
+                timeout=10
+            )
+
         except Exception:
             pass
 
         time.sleep(300)
 
-# ======================
+# =========================
 # 🔐 CONFIG
-# ======================
+# =========================
 BOT_TOKEN = os.getenv(
     "BOT_TOKEN",
     "7846603711:AAHGCm_uX7NmzHPFcRigI6ERNtCa91SXxZY"
@@ -60,9 +71,9 @@ MONGO_URI = os.getenv(
     "mongodb+srv://mergenowlyagulyyew41_db_user:ZvZhOKOAF6ZMRbHX@cluster1.l8z8gll.mongodb.net/?appName=Cluster1"
 )
 
-# ======================
+# =========================
 # 🍃 MONGO
-# ======================
+# =========================
 mongo = MongoClient(MONGO_URI)
 
 db = mongo["vpn_bot"]
@@ -71,15 +82,18 @@ admins = db["admins"]
 channels = db["channels"]
 settings = db["settings"]
 
-# Kanal ID unique olsun
-channels.create_index(
-    "channel_id",
-    unique=True
-)
+# Unique index
+try:
+    channels.create_index(
+        "channel_id",
+        unique=True
+    )
+except:
+    pass
 
-# ======================
+# =========================
 # 👮 ADMIN CHECK
-# ======================
+# =========================
 def is_admin(user_id):
 
     if user_id == KURUCU_ID:
@@ -89,9 +103,9 @@ def is_admin(user_id):
         "user_id": int(user_id)
     }) is not None
 
-# ======================
+# =========================
 # 📈 ADMIN COUNTER
-# ======================
+# =========================
 def increment_admin_counter(user_id):
 
     if user_id == KURUCU_ID:
@@ -99,8 +113,13 @@ def increment_admin_counter(user_id):
         admins.update_one(
             {"user_id": KURUCU_ID},
             {
-                "$inc": {"sent_count": 1},
-                "$set": {"is_kurucu": True}
+                "$inc": {
+                    "sent_count": 1
+                },
+
+                "$set": {
+                    "is_kurucu": True
+                }
             },
             upsert=True
         )
@@ -109,13 +128,17 @@ def increment_admin_counter(user_id):
 
         admins.update_one(
             {"user_id": int(user_id)},
-            {"$inc": {"sent_count": 1}},
+            {
+                "$inc": {
+                    "sent_count": 1
+                }
+            },
             upsert=True
         )
 
-# ======================
-# ⏳ LAST SHARE
-# ======================
+# =========================
+# ⏳ LAST SHARE INFO
+# =========================
 def get_last_share_text():
 
     data = settings.find_one({
@@ -149,9 +172,9 @@ def get_last_share_text():
         f"⏱️ **Wagty:** {wagt_text}"
     )
 
-# ======================
+# =========================
 # 🚀 START
-# ======================
+# =========================
 async def start(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE
@@ -174,24 +197,28 @@ async def start(
                 callback_data="vpn"
             )
         ],
+
         [
             InlineKeyboardButton(
                 "➕ Kanal Goş",
                 callback_data="add"
             )
         ],
+
         [
             InlineKeyboardButton(
                 "🗑️ Kanallary Dolandyr",
                 callback_data="manage_channels"
             )
         ],
+
         [
             InlineKeyboardButton(
                 "👮 Adminleri Dolandyr",
                 callback_data="manage_admins"
             )
         ],
+
         [
             InlineKeyboardButton(
                 "📊 Statistika",
@@ -206,13 +233,15 @@ async def start(
         f"🤖 **VPN BOT PANELI**\n\n"
         f"{last_share_info}\n\n"
         f"Lütfen amaly saýlaň:",
-        reply_markup=InlineKeyboardMarkup(keyboard),
+        reply_markup=InlineKeyboardMarkup(
+            keyboard
+        ),
         parse_mode="Markdown"
     )
 
-# ======================
+# =========================
 # 💬 TEXT HANDLER
-# ======================
+# =========================
 async def text_handler(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE
@@ -226,9 +255,9 @@ async def text_handler(
     state = context.user_data.get("state")
     text = update.message.text.strip()
 
-    # ======================
+    # =========================
     # ➕ ADD CHANNEL ID
-    # ======================
+    # =========================
     if state == "ADD_ID":
 
         is_valid_id = False
@@ -253,14 +282,14 @@ async def text_handler(
         context.user_data["state"] = "ADD_LINK"
 
         await update.message.reply_text(
-            "🔗 Kanal linkini ugradyň:\n"
+            "🔗 Kanal linkini ugradyň:\n\n"
             "`https://t.me/...`",
             parse_mode="Markdown"
         )
 
-    # ======================
+    # =========================
     # ➕ ADD CHANNEL LINK
-    # ======================
+    # =========================
     elif state == "ADD_LINK":
 
         if not (
@@ -270,7 +299,7 @@ async def text_handler(
         ):
 
             await update.message.reply_text(
-                "❌ Dogry link ugradyň!"
+                "❌ Dogry kanal linkini ugradyň!"
             )
 
             return
@@ -279,9 +308,16 @@ async def text_handler(
             "temp_channel_id"
         )
 
-        # Duplicate kontrol
+        # OLD + NEW SYSTEM CHECK
         existing = channels.find_one({
-            "channel_id": channel_id_str
+            "$or": [
+                {
+                    "channel_id": channel_id_str
+                },
+                {
+                    "_id": channel_id_str
+                }
+            ]
         })
 
         if existing:
@@ -293,7 +329,7 @@ async def text_handler(
             context.user_data.clear()
             return
 
-        # Yeni kanal ekle
+        # SAVE NEW CHANNEL
         channels.insert_one({
             "channel_id": channel_id_str,
             "link": text,
@@ -306,15 +342,15 @@ async def text_handler(
 
         context.user_data.clear()
 
-    # ======================
+    # =========================
     # 👮 ADD ADMIN
-    # ======================
+    # =========================
     elif state == "ADD_ADMIN":
 
         if not text.isdigit():
 
             await update.message.reply_text(
-                "❌ Diňe ID ugradyň!"
+                "❌ Diňe san görnüşinde ID ugradyň!"
             )
 
             return
@@ -322,12 +358,16 @@ async def text_handler(
         target_id = int(text)
 
         admins.update_one(
-            {"user_id": target_id},
+            {
+                "user_id": target_id
+            },
+
             {
                 "$setOnInsert": {
                     "sent_count": 0
                 }
             },
+
             upsert=True
         )
 
@@ -338,9 +378,9 @@ async def text_handler(
 
         context.user_data.clear()
 
-    # ======================
+    # =========================
     # 🔗 VPN
-    # ======================
+    # =========================
     elif state == "VPN":
 
         context.user_data["vpn"] = text
@@ -350,9 +390,9 @@ async def text_handler(
             "📝 Düşündiriş ugradyň:"
         )
 
-    # ======================
+    # =========================
     # 📝 DESCRIPTION
-    # ======================
+    # =========================
     elif state == "DESC":
 
         context.user_data["desc"] = text
@@ -365,9 +405,9 @@ async def text_handler(
             )
         )
 
-# ======================
+# =========================
 # 🚀 SEND PROCESS
-# ======================
+# =========================
 async def awto_goyber_prosesi(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
@@ -380,7 +420,7 @@ async def awto_goyber_prosesi(
     context.user_data.clear()
 
     status_msg = await update.message.reply_text(
-        "⏳ VPN ugradylýar..."
+        "⏳ VPN ähli kanallara ugradylýar..."
     )
 
     all_channels = list(
@@ -390,19 +430,21 @@ async def awto_goyber_prosesi(
     if not all_channels:
 
         await status_msg.edit_text(
-            "❌ Kanal tapylmady!"
+            "❌ Kanal ýok!"
         )
 
         return
 
     settings.update_one(
         {"key": "last_share"},
+
         {
             "$set": {
                 "sender_id": sender_id,
                 "timestamp": time.time()
             }
         },
+
         upsert=True
     )
 
@@ -462,7 +504,9 @@ async def awto_goyber_prosesi(
 
     if fail_channels:
 
-        report += "❌ HATALAR:\n\n"
+        report += (
+            "❌ HATALAR:\n\n"
+        )
 
         report += "\n\n".join(
             fail_channels[:10]
@@ -473,9 +517,9 @@ async def awto_goyber_prosesi(
         parse_mode="Markdown"
     )
 
-# ======================
+# =========================
 # 🗑️ CHANNEL PANEL
-# ======================
+# =========================
 async def kanal_pozmak_paneli(
     message,
     is_callback=False
@@ -546,9 +590,9 @@ async def kanal_pozmak_paneli(
             )
         )
 
-# ======================
+# =========================
 # 👮 ADMIN PANEL
-# ======================
+# =========================
 async def admin_dolandyr_paneli(
     message,
     is_callback=False
@@ -624,9 +668,9 @@ async def admin_dolandyr_paneli(
             parse_mode="Markdown"
         )
 
-# ======================
+# =========================
 # 📊 STATS
-# ======================
+# =========================
 async def statistika_paneli(
     message
 ):
@@ -665,9 +709,9 @@ async def statistika_paneli(
         parse_mode="Markdown"
     )
 
-# ======================
+# =========================
 # 🔘 CALLBACKS
-# ======================
+# =========================
 async def callback(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE
@@ -684,9 +728,9 @@ async def callback(
 
     data = q.data
 
-    # ======================
-    # ADD CHANNEL
-    # ======================
+    # =========================
+    # ➕ ADD CHANNEL
+    # =========================
     if data == "add":
 
         context.user_data["state"] = "ADD_ID"
@@ -698,9 +742,9 @@ async def callback(
 
         return
 
-    # ======================
-    # VPN
-    # ======================
+    # =========================
+    # 🔗 VPN
+    # =========================
     if data == "vpn":
 
         context.user_data["state"] = "VPN"
@@ -711,9 +755,9 @@ async def callback(
 
         return
 
-    # ======================
-    # MANAGE CHANNELS
-    # ======================
+    # =========================
+    # 🗑️ MANAGE CHANNELS
+    # =========================
     if data == "manage_channels":
 
         await kanal_pozmak_paneli(
@@ -723,9 +767,9 @@ async def callback(
 
         return
 
-    # ======================
-    # DELETE CHANNEL
-    # ======================
+    # =========================
+    # ❌ DELETE CHANNEL
+    # =========================
     if data.startswith("del_") and not data.startswith("del_adm_"):
 
         target_cid = data.replace(
@@ -734,7 +778,14 @@ async def callback(
         )
 
         channels.delete_one({
-            "channel_id": target_cid
+            "$or": [
+                {
+                    "channel_id": target_cid
+                },
+                {
+                    "_id": target_cid
+                }
+            ]
         })
 
         await kanal_pozmak_paneli(
@@ -744,9 +795,9 @@ async def callback(
 
         return
 
-    # ======================
-    # ADMIN PANEL
-    # ======================
+    # =========================
+    # 👮 ADMIN PANEL
+    # =========================
     if data == "manage_admins":
 
         await admin_dolandyr_paneli(
@@ -756,9 +807,9 @@ async def callback(
 
         return
 
-    # ======================
-    # ADD ADMIN
-    # ======================
+    # =========================
+    # ➕ ADD ADMIN
+    # =========================
     if data == "add_admin_btn":
 
         context.user_data["state"] = "ADD_ADMIN"
@@ -769,9 +820,9 @@ async def callback(
 
         return
 
-    # ======================
-    # DELETE ADMIN
-    # ======================
+    # =========================
+    # ❌ DELETE ADMIN
+    # =========================
     if data.startswith("del_adm_"):
 
         target_aid = int(
@@ -792,9 +843,9 @@ async def callback(
 
         return
 
-    # ======================
-    # STATS
-    # ======================
+    # =========================
+    # 📊 STATS
+    # =========================
     if data == "stats":
 
         await statistika_paneli(
@@ -803,9 +854,9 @@ async def callback(
 
         return
 
-    # ======================
-    # BACK MAIN
-    # ======================
+    # =========================
+    # ⬅️ BACK MAIN
+    # =========================
     if data == "back_main":
 
         keyboard = [
@@ -815,24 +866,28 @@ async def callback(
                     callback_data="vpn"
                 )
             ],
+
             [
                 InlineKeyboardButton(
                     "➕ Kanal Goş",
                     callback_data="add"
                 )
             ],
+
             [
                 InlineKeyboardButton(
                     "🗑️ Kanallary Dolandyr",
                     callback_data="manage_channels"
                 )
             ],
+
             [
                 InlineKeyboardButton(
                     "👮 Adminleri Dolandyr",
                     callback_data="manage_admins"
                 )
             ],
+
             [
                 InlineKeyboardButton(
                     "📊 Statistika",
@@ -853,9 +908,9 @@ async def callback(
             parse_mode="Markdown"
         )
 
-# ======================
-# 🤖 RUN
-# ======================
+# =========================
+# 🤖 RUN BOT
+# =========================
 def run():
 
     app = Application.builder() \
@@ -888,9 +943,9 @@ def run():
 
     app.run_polling()
 
-# ======================
+# =========================
 # 🚀 MAIN
-# ======================
+# =========================
 if __name__ == "__main__":
 
     threading.Thread(
