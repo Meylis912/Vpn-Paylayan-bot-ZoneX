@@ -27,7 +27,7 @@ app_flask = Flask(__name__)
 
 RENDER_URL = os.getenv(
     "RENDER_URL",
-    "https://vpn-bot-z9rj.onrender.com"
+    "https://vpn-paylayan-bot-zonex.onrender.com"
 )
 
 @app_flask.route("/")
