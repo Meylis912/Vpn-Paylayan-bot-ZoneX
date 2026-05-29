@@ -114,7 +114,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 # ======================
-# 💬 TEXT HANDLER (ÄDIME-ÄDIM KANAL GOŞMAK)
+# 💬 TEXT HANDLER
 # ======================
 async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
@@ -126,7 +126,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # ➕ KANAL GOŞMAK - 1-NJI ÄDIM: ID BARLAGY
     if state == "ADD_ID":
-        # Telegram kanal ID-leri adatça minus (-) bilen başlaýar we galany diňe san bolýar
+        # ID-niň formatyny barlamak we arassalamak
         is_valid_id = False
         if text.startswith('-') and text[1:].isdigit():
             is_valid_id = True
@@ -137,12 +137,11 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("❌ Format ýalňyş! Diňe anyk Kanal ID ugradyň (Mysal: `-1003262094319`):", parse_mode="Markdown")
             return
             
-        # ID dogry bolsa, wagtlaýyn saklaýarys we link soraýarys
         context.user_data["temp_channel_id"] = text
         context.user_data["state"] = "ADD_LINK"
-        await update.message.reply_text("🔗 Indi bolsa şol kanalyň **Çykaryş Linkini** (t.me/...) ugradyň:", parse_mode="Markdown")
+        await update.message.reply_text("🔗 Indi bolsa şol kanalyň **Çykaryş Linkini** (https://t.me/...) ugradyň:", parse_mode="Markdown")
 
-    # ➕ KANAL GOŞMAK - 2-NJI ÄDIM: LINKI ALMAK WE MONGODB-Ä ÝAZMAK
+    # ➕ KANAL GOŞMAK - 2-NJI ÄDIM: LINKI ALMAK (DÜZEDILDI)
     elif state == "ADD_LINK":
         if not (text.startswith("http://") or text.startswith("https://") or text.startswith("t.me/")):
             await update.message.reply_text("❌ Format ýalňyş! Lütfen dogry kanal linkini ugradyň (Mysal: `https://t.me/...`):", parse_mode="Markdown")
@@ -150,10 +149,10 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
         channel_id_str = context.user_data.get("temp_channel_id")
         
-        # MongoDB-de her kanaly öz aýratyn ID-si bilen durnukly saklaýarys
+        # JÖSBIT DÜZEDIŞ: _id parametrini hem channel_id edýäris. Şonda MongoDB muna "täze maglumat" hökmünde sereder we öňki kanaly öçürmez!
         channels.update_one(
-            {"channel_id": channel_id_str},
-            {"$set": {"_id": channel_id_str, "link": text}},
+            {"_id": channel_id_str},
+            {"$set": {"channel_id": channel_id_str, "link": text}},
             upsert=True
         )
         
@@ -211,7 +210,7 @@ async def awto_goyber_prosesi(update: Update, context: ContextTypes.DEFAULT_TYPE
     fail_channels = []
 
     for c in all_channels:
-        cid = str(c["channel_id"]).strip()
+        cid = str(c.get("channel_id")).strip()
         clink = c.get("link", f"ID: {cid}")
         
         try:
@@ -257,7 +256,7 @@ async def kanal_pozmak_paneli(message, is_callback=False):
     else:
         text = "🗑️ **Pozmak isleýän kanalyňyzyň ýanyndaky ❌ düwmesine basyň:**"
         for c in all_channels:
-            cid = str(c["channel_id"])
+            cid = str(c.get("channel_id"))
             clink = c.get("link", f"ID: {cid}")
             keyboard.append([
                 InlineKeyboardButton(f"{clink}", callback_data="none"),
@@ -339,7 +338,6 @@ async def callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     data = q.data
 
-    # ➕ KANAL GOŞMAK - 1-NJI ÄDIMI BAŞLATMAK
     if data == "add":
         context.user_data["state"] = "ADD_ID"
         await q.message.reply_text("🔢 Lütfen ilki goşjak kanalyňyzyň **Kanal ID**-sini ugradyň (Mysal: `-1003262094319`):", parse_mode="Markdown")
@@ -356,7 +354,7 @@ async def callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if data.startswith("del_") and not data.startswith("del_adm_"):
         target_cid = data.replace("del_", "")
-        channels.delete_one({"channel_id": target_cid})
+        channels.delete_one({"_id": target_cid}) # _id arkaly durnukly öçürýäris
         await kanal_pozmak_paneli(q.message, is_callback=True)
         return
 
@@ -403,7 +401,7 @@ def run():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
     app.add_handler(CallbackQueryHandler(callback))
-    print("Bot täze ädimli kanal ulgamy bilen başlady...")
+    print("Bot täze we durnukly MongoDB gurluşy bilen başlady...")
     app.run_polling()
 
 if __name__ == "__main__":
