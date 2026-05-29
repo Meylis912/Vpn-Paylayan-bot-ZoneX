@@ -72,7 +72,6 @@ def get_last_share_text():
 
     sender = data.get("sender_id")
     share_time_ts = data.get("timestamp")
-
     diff_seconds = int(time.time() - share_time_ts)
 
     if diff_seconds < 60:
@@ -128,42 +127,39 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     state = context.user_data.get("state")
     text = update.message.text.strip()
 
-    # ➕ KANAL GOŞMAK
+    # ➕ 1. ADIM: KANAL ID
     if state == "ADD":
-        try:
-            parts = text.split("|", 1)
-            if len(parts) != 2:
-                raise ValueError("Format hatası")
+        context.user_data["cid"] = text
+        context.user_data["state"] = "ADD_LINK"
+        await update.message.reply_text(
+            f"✅ ID alyndy: `{text}`\n\n🔗 Indi kanal linkini ugradyň:\nMisal: `https://t.me/ZHapp_vpn`",
+            parse_mode="Markdown"
+        )
 
-            cid = parts[0].strip()
-            link = parts[1].strip()
+    # ➕ 2. ADIM: KANAL LİNK
+    elif state == "ADD_LINK":
+        cid = context.user_data.get("cid")
+        link = text
 
-            if not cid or not link:
-                raise ValueError("Boş alan")
-
-            channels_col.update_one(
-                {"channel_id": cid},
-                {"$set": {"channel_id": cid, "link": link}},
-                upsert=True
-            )
-            context.user_data.clear()
-            await update.message.reply_text(
-                f"✅ Kanal üstünlikli goşuldy!\n📢 ID: `{cid}`\n🔗 Link: {link}",
-                parse_mode="Markdown"
-            )
-        except Exception as e:
-            await update.message.reply_text(
-                "❌ Format ýalňyş!\n\nDogry format:\n`-1001234567890 | https://t.me/kanal_adi`",
-                parse_mode="Markdown"
-            )
+        channels_col.update_one(
+            {"channel_id": cid},
+            {"$set": {"channel_id": cid, "link": link}},
+            upsert=True
+        )
+        context.user_data.clear()
+        await update.message.reply_text(
+            f"✅ Kanal üstünlikli goşuldy!\n\n📢 ID: `{cid}`\n🔗 Link: {link}",
+            parse_mode="Markdown"
+        )
 
     # 👮 ADMIN GOŞMAK
     elif state == "ADD_ADMIN":
-        if not text.isdigit() and not (text.startswith('-') and text[1:].isdigit()):
+        clean = text.strip()
+        if not (clean.isdigit() or (clean.startswith('-') and clean[1:].isdigit())):
             await update.message.reply_text("❌ Ýalňyş ID! Diňe san ugradyň:")
             return
 
-        target_id = int(text)
+        target_id = int(clean)
 
         if target_id == KURUCU_ID:
             await update.message.reply_text("⚠️ Kurucu eýýäm admin!")
@@ -192,7 +188,6 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         asyncio.create_task(awto_goyber_prosesi(update, context, uid))
 
     else:
-        # Durum yoksa ana menüye yönlendir
         last_share_info = get_last_share_text()
         await update.message.reply_text(
             f"🤖 **VPN BOT PANELI**\n\n{last_share_info}\n\nLütfen amaly saýlaň:",
@@ -229,11 +224,10 @@ async def awto_goyber_prosesi(update: Update, context: ContextTypes.DEFAULT_TYPE
         clink = c.get("link", f"ID: {cid}")
 
         try:
-            # Güvenli ID dönüşümü
             try:
                 chat_target = int(cid)
             except ValueError:
-                chat_target = cid  # @username gibi string ID'ler için
+                chat_target = cid
 
             await context.bot.send_message(
                 chat_id=chat_target,
@@ -241,7 +235,7 @@ async def awto_goyber_prosesi(update: Update, context: ContextTypes.DEFAULT_TYPE
             )
             ok_channels.append(f"🟢 {clink}")
         except Exception as e:
-            fail_channels.append(f"🔴 {clink}\n   ↳ Hata: `{str(e)[:80]}`")
+            fail_channels.append(f"🔴 {clink}\n   ↳ `{str(e)[:80]}`")
 
     increment_admin_counter(sender_id)
 
@@ -301,7 +295,7 @@ async def admin_dolandyr_paneli(message, is_callback=False):
         [InlineKeyboardButton("➕ Täze Admin Goş", callback_data="add_admin_btn")]
     ]
 
-    text = f"👮 **Adminleri Dolandyryş Paneli:**\n\n"
+    text = "👮 **Adminleri Dolandyryş Paneli:**\n\n"
     text += f"👑 **Esasy Kurucu:** `{KURUCU_ID}` (Goragly)\n\n"
 
     if all_admins:
@@ -370,49 +364,42 @@ async def callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     data = q.data
 
-    # Hiçbir işlem yapma butonu
     if data == "none":
         return
 
-    # ➕ Kanal ekle
     if data == "add":
         context.user_data.clear()
         context.user_data["state"] = "ADD"
         await q.message.reply_text(
-            "📢 Kanal maglumatyny ugradyň:\n\nDogry format:\n`-1001234567890 | https://t.me/kanal_adi`",
+            "📢 Ilki bilen kanal ID-sini ugradyň:\n\nMisal: `-1003262094319`",
             parse_mode="Markdown"
         )
         return
 
-    # 🔗 VPN paylaş
     if data == "vpn":
         context.user_data.clear()
         context.user_data["state"] = "VPN"
         await q.message.reply_text("🔗 Göni VPN linkini ugradyň:")
         return
 
-    # 🗑️ Kanal yönet
     if data == "manage_channels":
         await kanal_pozmak_paneli(q.message, is_callback=True)
         return
 
-    # ❌ Kanal sil
     if data.startswith("del_") and not data.startswith("del_adm_"):
-        target_cid = data[4:]  # "del_" sonrasını al
+        target_cid = data[4:]
         result = channels_col.delete_one({"channel_id": target_cid})
         if result.deleted_count > 0:
-            await q.answer("✅ Kanal üstünlikli pozuldy!", show_alert=False)
+            await q.answer("✅ Kanal üstünlikli pozuldy!")
         else:
             await q.answer("⚠️ Kanal tapylmady!", show_alert=True)
         await kanal_pozmak_paneli(q.message, is_callback=True)
         return
 
-    # 👮 Admin yönet
     if data == "manage_admins":
         await admin_dolandyr_paneli(q.message, is_callback=True)
         return
 
-    # ➕ Admin ekle butonu
     if data == "add_admin_btn":
         context.user_data.clear()
         context.user_data["state"] = "ADD_ADMIN"
@@ -422,9 +409,8 @@ async def callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # ❌ Admin sil
     if data.startswith("del_adm_"):
-        target_aid_str = data[8:]  # "del_adm_" sonrasını al
+        target_aid_str = data[8:]
         try:
             target_aid = int(target_aid_str)
         except ValueError:
@@ -437,18 +423,16 @@ async def callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         result = admins_col.delete_one({"user_id": target_aid})
         if result.deleted_count > 0:
-            await q.answer("✅ Admin üstünlikli pozuldy!", show_alert=False)
+            await q.answer("✅ Admin üstünlikli pozuldy!")
         else:
             await q.answer("⚠️ Admin tapylmady!", show_alert=True)
         await admin_dolandyr_paneli(q.message, is_callback=True)
         return
 
-    # 📊 İstatistik
     if data == "stats":
         await statistika_paneli(q.message)
         return
 
-    # ⬅️ Ana menüye dön
     if data == "back_main":
         context.user_data.clear()
         last_share_info = get_last_share_text()
