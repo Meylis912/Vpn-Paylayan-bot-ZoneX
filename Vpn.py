@@ -31,7 +31,7 @@ def keep_alive():
 # ======================
 # 🔐 CONFIG
 # ======================
-BOT_TOKEN = os.getenv("BOT_TOKEN", "7846603711:AAHvjcqfwEe7VG2EVnD1krqQsa6v8D6Zy3Y")
+BOT_TOKEN = os.getenv("BOT_TOKEN", "7846603711:AAHGCm_uX7NmzHPFcRigI6ERNtCa91SXxZY")
 KURUCU_ID = int(os.getenv("KURUCU_ID", "7523674506"))
 MONGO_URI = os.getenv("MONGO_URI", "mongodb+srv://mergenowlyagulyyew41_db_user:ZvZhOKOAF6ZMRbHX@cluster1.l8z8gll.mongodb.net/?appName=Cluster1")
 
@@ -39,7 +39,7 @@ mongo = MongoClient(MONGO_URI)
 db = mongo["vpn_bot"]
 admins = db["admins"]
 channels = db["channels"]
-settings = db["settings"]  # Iň soňky paýlaşyk wagtyny saklamak üçin
+settings = db["settings"]
 
 # ======================
 # 👮 ADMIN CHECK & COUNTER
@@ -64,7 +64,7 @@ def increment_admin_counter(user_id):
         )
 
 # ======================
-# ⏳ WAGT HASAPLAMAK (HUMAN READABLE)
+# ⏳ WAGT HASAPLAMAK
 # ======================
 def get_last_share_text():
     data = settings.find_one({"key": "last_share"})
@@ -124,13 +124,12 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     state = context.user_data.get("state")
     text = update.message.text
 
-    # ➕ KANAL GOŞMAK (Düzedildi!)
+    # ➕ KANAL GOŞMAK
     if state == "ADD":
         try:
             cid, link = text.split("|")
             channel_id_str = cid.strip()
             
-            # MongoDB-de her kanaly aýratyn ID bilen goşýarys, şonda biri-biriniň üstüne ýazmaz!
             channels.update_one(
                 {"channel_id": channel_id_str},
                 {"$set": {"_id": channel_id_str, "link": link.strip()}},
@@ -166,7 +165,6 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # 📝 DESC VE AUTOMATIC SEND
     elif state == "DESC":
         context.user_data["desc"] = text
-        # Arka planda async ugratmak (Bökmezligi üçin asyncio task ulanýarys)
         asyncio.create_task(awto_goyber_prosesi(update, context, uid))
 
 # ======================
@@ -175,16 +173,15 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def awto_goyber_prosesi(update: Update, context: ContextTypes.DEFAULT_TYPE, sender_id: int):
     vpn = context.user_data.get("vpn")
     desc = context.user_data.get("desc")
-    context.user_data.clear() # Sessiýany arassalaýarys
+    context.user_data.clear()
     
     status_msg = await update.message.reply_text("⏳ VPN ähli kanallara ugradylýar, garaşyň...")
 
     all_channels = list(channels.find({}))
     if not all_channels:
-        await status_msg.edit_text("❌ Binada hiç hili kanal tapymaldy!")
+        await status_msg.edit_text("❌ Binada hiç hili kanal tapylmady!")
         return
 
-    # Iň soňky paýlaşan adamy we wagty ýazýarys
     settings.update_one(
         {"key": "last_share"},
         {"$set": {"sender_id": sender_id, "timestamp": time.time()}},
@@ -195,21 +192,28 @@ async def awto_goyber_prosesi(update: Update, context: ContextTypes.DEFAULT_TYPE
     fail_channels = []
 
     for c in all_channels:
-        cid = c["channel_id"]
+        cid = str(c["channel_id"]).strip()
         clink = c.get("link", f"ID: {cid}")
+        
         try:
-            chat_target = int(cid) if cid.strip().replace('-', '').isdigit() else cid.strip()
+            # ID formatyny anyk san görnüşine süzýäris (- belligini saklap)
+            if cid.startswith('-') and cid[1:].isdigit():
+                chat_target = int(cid)
+            elif cid.isdigit():
+                chat_target = int(cid)
+            else:
+                chat_target = cid
+
             await context.bot.send_message(
                 chat_id=chat_target,
                 text=f"{vpn}\n\n{desc}"
             )
             ok_channels.append(f"🟢 {clink}")
-        except Exception:
-            fail_channels.append(f"🔴 {clink}")
+        except Exception as e:
+            fail_channels.append(f"🔴 {clink} (Hata: {str(e)})")
 
     increment_admin_counter(sender_id)
 
-    # Hasabaty ekrana anyk çykarýas
     report = "📊 **GÖYBERLEN KANALLARYŇ NETIJESI:**\n\n"
     if ok_channels:
         report += "✅ **Şowluy ugradylan kanallar:**\n" + "\n".join(ok_channels) + "\n\n"
@@ -217,7 +221,7 @@ async def awto_goyber_prosesi(update: Update, context: ContextTypes.DEFAULT_TYPE
         report += "✅ **Şowluy ugradylan kanallar:** Ýok.\n\n"
         
     if fail_channels:
-        report += "❌ **Göyberip bilinmedik kanallar (Bot admin däl):**\n" + "\n".join(fail_channels)
+        report += "❌ **Göyberip bilinmedik kanallar:**\n" + "\n".join(fail_channels)
     else:
         report += "❌ **Göyberip bilinmedik kanallar:** Ýok, hemmesine üstünlikli gitdi."
 
@@ -380,11 +384,11 @@ def run():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
     app.add_handler(CallbackQueryHandler(callback))
-    print("Bot işläp dur...")
+    print("Bot durnukly yagdayda baslady...")
     app.run_polling()
 
 if __name__ == "__main__":
     threading.Thread(target=keep_alive, daemon=True).start()
     threading.Thread(target=lambda: app_flask.run(host="0.0.0.0", port=int(os.getenv("PORT", 10000))), daemon=True).start()
     run()
-    
+        
