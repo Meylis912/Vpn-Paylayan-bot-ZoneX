@@ -12,7 +12,8 @@ from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQu
 # ======================
 app_flask = Flask(__name__)
 
-RENDER_URL = os.getenv("https://vpn-bot-z9rj.onrender.com")
+# Render URL-i göni setir hökmünde goýduk ýa-da os.getenv içindäki default baha geçirdik
+RENDER_URL = os.getenv("RENDER_URL", "https://vpn-bot-z9rj.onrender.com")
 
 @app_flask.route("/")
 def home():
@@ -23,17 +24,16 @@ def keep_alive():
     while True:
         try:
             requests.get(RENDER_URL, timeout=10)
-        except:
+        except Exception:
             pass
         time.sleep(300)
 
 # ======================
-# 🔐 CONFIG (ONLY ONCE!)
+# 🔐 CONFIG (Kompakt sazlamalar)
 # ======================
-BOT_TOKEN = os.getenv("7846603711:AAHvjcqfwEe7VG2EVnD1krqQsa6v8D6Zy3Y")
-KURUCU_ID = int(os.getenv("7523674506"))
-
-MONGO_URI = os.getenv("mongodb+srv://mergenowlyagulyyew41_db_user:ZvZhOKOAF6ZMRbHX@cluster1.l8z8gll.mongodb.net/?appName=Cluster1")
+BOT_TOKEN = os.getenv("BOT_TOKEN", "7846603711:AAHvjcqfwEe7VG2EVnD1krqQsa6v8D6Zy3Y")
+KURUCU_ID = int(os.getenv("KURUCU_ID", "7523674506"))
+MONGO_URI = os.getenv("MONGO_URI", "mongodb+srv://mergenowlyagulyyew41_db_user:ZvZhOKOAF6ZMRbHX@cluster1.l8z8gll.mongodb.net/?appName=Cluster1")
 
 mongo = MongoClient(MONGO_URI)
 db = mongo["vpn_bot"]
@@ -55,12 +55,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
 
     if not is_admin(uid):
-        await update.message.reply_text("⛔ You are not allowed!")
+        await update.message.reply_text("⛔ Size rugsat berilmedi!")
         return
 
     keyboard = [
-        [InlineKeyboardButton("🔗 VPN Share", callback_data="vpn")],
-        [InlineKeyboardButton("➕ Add Channel", callback_data="add")]
+        [InlineKeyboardButton("🔗 VPN Paýlaş", callback_data="vpn")],
+        [InlineKeyboardButton("➕ Kanal Goş", callback_data="add")]
     ]
 
     await update.message.reply_text(
@@ -79,65 +79,78 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     state = context.user_data.get("state")
     text = update.message.text
 
-    # ➕ ADD CHANNEL
+    # ➕ KANAL GOŞMAK
     if state == "ADD":
         try:
             cid, link = text.split("|")
-
             channels.update_one(
                 {"channel_id": cid.strip()},
                 {"$set": {"link": link.strip()}},
                 upsert=True
             )
-
-            await update.message.reply_text("✅ Channel added!")
+            await update.message.reply_text("✅ Kanal üstünlikli goşuldy!")
             context.user_data.clear()
-        except:
-            await update.message.reply_text("❌ Format: ID | link")
+        except Exception:
+            await update.message.reply_text("❌ Format ýalňyş! Format: ID | link")
 
-    # 🔗 VPN LINK
+    # 🔗 VPN LINK SORAMAK
     elif state == "VPN":
         context.user_data["vpn"] = text
         context.user_data["state"] = "DESC"
-        await update.message.reply_text("📝 Send description")
+        await update.message.reply_text("📝 Indi bolsa düşündirişini (Description) ugradyň:")
 
-    # 📝 DESC
+    # 📝 DESC VE GÖNI SEND (Hemmesine Awto-Ugratmak)
     elif state == "DESC":
         context.user_data["desc"] = text
-        context.user_data["selected"] = set()
-        await vpn_panel(update, context)
+        await ugrat_prosesi(update, context)
 
 # ======================
-# 📡 VPN PANEL
+# 🚀 SEND PROCESS (Awtomatiki ugratmak we Hasabat)
 # ======================
-async def vpn_panel(update, context):
-    data = list(channels.find({}))
-    selected = context.user_data.get("selected", set())
+async def ugrat_prosesi(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    vpn = context.user_data.get("vpn")
+    desc = context.user_data.get("desc")
+    
+    status_msg = await update.message.reply_text("⏳ VPN kanallara ugradylýar, garaşyň...")
 
-    keyboard = [
-        [
-            InlineKeyboardButton("🚀 SEND", callback_data="send"),
-            InlineKeyboardButton("✅ ALL", callback_data="all")
-        ]
-    ]
+    all_channels = list(channels.find({}))
+    if not all_channels:
+        await status_msg.edit_text("❌ Binada hiç hili kanal tapylmady. Ilki kanal goşuň!")
+        context.user_data.clear()
+        return
 
-    for c in data:
-        cid = str(c["channel_id"])
-        mark = "🟢" if cid in selected else "🔴"
+    ok_channels = []
+    fail_channels = []
 
-        keyboard.append([
-            InlineKeyboardButton(
-                f"{mark} {c['link']}",
-                callback_data=f"t_{cid}"
+    for c in all_channels:
+        cid = c["channel_id"]
+        clink = c.get("link", f"ID: {cid}")
+        try:
+            # Kanallara ugratmak (Kanal ID int ýa-da string bolup bilýär, şona görä barlap ugradýar)
+            chat_target = int(cid) if cid.strip().replace('-', '').isdigit() else cid.strip()
+            await context.bot.send_message(
+                chat_id=chat_target,
+                text=f"{vpn}\n\n{desc}"
             )
-        ])
+            ok_channels.append(f"🟢 {clink}")
+        except Exception as e:
+            fail_channels.append(f"🔴 {clink} (Rugsat ýok/Bot admin däl)")
 
-    text = f"🔗 {context.user_data.get('vpn')}\n📝 {context.user_data.get('desc')}"
+    # Hasabat taýýarlamak
+    report = "📊 **PAÝLAŞYÝAN NETIJESI:**\n\n"
+    
+    if ok_channels:
+        report += "✅ **Şowluy ugradylan kanallar:**\n" + "\n".join(ok_channels) + "\n\n"
+    else:
+        report += "✅ **Şowluy ugradylan kanallar:** Hiç birine gitmedi.\n\n"
+        
+    if fail_channels:
+        report += "❌ **Ugradyp bilinmedik kanallar (Rugsat ýok):**\n" + "\n".join(fail_channels)
+    else:
+        report += "❌ **Ugradyp bilinmedik kanallar:** Ýok, hemmesine gitdi."
 
-    await update.message.reply_text(
-        text,
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
+    await status_msg.edit_text(report, parse_mode="Markdown")
+    context.user_data.clear()
 
 # ======================
 # 🔘 CALLBACKS
@@ -151,76 +164,31 @@ async def callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     data = q.data
-    selected = context.user_data.get("selected", set())
 
-    # ➕ ADD CHANNEL
+    # ➕ KANAL GOŞ düwmesi
     if data == "add":
         context.user_data["state"] = "ADD"
-        await q.message.reply_text("Send: ID | link")
+        await q.message.reply_text("Kanal maglumatyny ugradyň:\nFormat: `Kanal_ID | Kanal_Linki`", parse_mode="Markdown")
         return
 
-    # 🔗 VPN
+    # 🔗 VPN PAÝLAŞ düwmesi
     if data == "vpn":
         context.user_data["state"] = "VPN"
-        await q.message.reply_text("Send VPN link")
+        await q.message.reply_text("🔗 Göni VPN linkini ugradyň:")
         return
-
-    # 🔘 TOGGLE
-    if data.startswith("t_"):
-        cid = data.replace("t_", "")
-
-        if cid in selected:
-            selected.remove(cid)
-        else:
-            selected.add(cid)
-
-        context.user_data["selected"] = selected
-        await vpn_panel(update, context)
-        return
-
-    # 🚀 SEND
-    if data == "send":
-        vpn = context.user_data.get("vpn")
-        desc = context.user_data.get("desc")
-
-        ok, fail = 0, 0
-
-        for cid in selected:
-            try:
-                await context.bot.send_message(
-                    chat_id=cid,
-                    text=f"{vpn}\n\n{desc}"
-                )
-                ok += 1
-            except:
-                fail += 1
-
-        await q.message.edit_text(f"Done!\nOK: {ok}\nFAIL: {fail}")
-        context.user_data.clear()
-
-    # ✅ ALL
-    if data == "all":
-        all_channels = list(channels.find({}))
-        all_ids = {str(c["channel_id"]) for c in all_channels}
-
-        if selected == all_ids:
-            context.user_data["selected"] = set()
-        else:
-            context.user_data["selected"] = all_ids
-
-        await vpn_panel(update, context)
 
 # ======================
 # 🤖 RUN BOT
 # ======================
 def run():
+    # Import düzedildi (İmport -> import)
     app = Application.builder().token(BOT_TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
     app.add_handler(CallbackQueryHandler(callback))
 
-    print("Bot running...")
+    print("Bot işläp dur...")
     app.run_polling()
 
 # ======================
@@ -230,3 +198,4 @@ if __name__ == "__main__":
     threading.Thread(target=keep_alive, daemon=True).start()
     threading.Thread(target=lambda: app_flask.run(host="0.0.0.0", port=int(os.getenv("PORT", 10000))), daemon=True).start()
     run()
+    
