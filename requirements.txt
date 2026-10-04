@@ -1,4 +1,6 @@
 aiogram
 aiohttp
 motor
+dnspython
 flask
+tzdata
