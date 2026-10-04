@@ -1,5 +1,4 @@
-python-telegram-bot
-Flask
-requests
-pymongo
-dnspython
+aiogram
+aiohttp
+motor
+flask
